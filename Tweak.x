@@ -42,6 +42,13 @@ bool shortcutRingerInverted;
 
 bool hapticEnabled;
 NSString *hapticStyle;
+bool keepScreenOff;
+
+NSTimeInterval lastWakeRequestTime = 0;
+NSTimeInterval screenOffGuardUntil = 0;
+bool screenWasOffAtWake = false;
+
+static void lockDevice();
 
 NSTimeInterval lastVolumeUpPressTime = 0;
 NSTimeInterval lastVolumeDownPressTime = 0;
@@ -65,6 +72,7 @@ static void InitPrefs(void) {
 			@"kFlashlightTimeoutVal": @15,
 			@"kHapticFeedback": @NO,
 			@"kHapticStyle": @"medium",
+			@"kKeepScreenOff": @NO,
 		};
 		prefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
 		[prefs registerDefaults:defaultPrefs];
@@ -83,6 +91,7 @@ static void UpdatePrefs() {
 	flashlightTimeoutVal = [prefs integerForKey:@"kFlashlightTimeoutVal"];
 	hapticEnabled = [prefs boolForKey:@"kHapticFeedback"];
 	hapticStyle = [prefs stringForKey:@"kHapticStyle"];
+	keepScreenOff = [prefs boolForKey:@"kKeepScreenOff"];
 
 	shortcutVolume = [flashlightShortcut isEqualToString:@"volume"];
 	shortcutDoubleLock = [flashlightShortcut isEqualToString:@"doubleLock"];
@@ -156,6 +165,39 @@ static void RecordTrigger(NSString *source) {
 }
 
 
+//	The backlight source numbers differ between iOS versions. Recording the
+//	recent ones shows which number the lock button uses on this device instead
+//	of guessing at it.
+static void RecordBacklightSource(long long source) {
+	NSMutableArray *sources = [[prefs arrayForKey:@"kRecentBacklightSources"] mutableCopy];
+	if (!sources)
+		sources = [NSMutableArray array];
+
+	[sources insertObject:@(source) atIndex:0];
+	while (sources.count > 8)
+		[sources removeLastObject];
+
+	[prefs setObject:sources forKey:@"kRecentBacklightSources"];
+}
+
+
+//	A lock button press wakes the screen before the long press is recognised, so
+//	the wake cannot simply be refused. Put the screen back off instead, and
+//	refuse the wake requests that follow.
+static void KeepScreenOffIfNeeded(NSString *source) {
+	if (!keepScreenOff || !source)
+		return;
+
+	NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+	screenOffGuardUntil = now + 1.5;
+
+	//	Only undo a wake the button press itself caused. Nothing is dimmed if
+	//	the screen was already on and in use.
+	if (screenWasOffAtWake && (now - lastWakeRequestTime) < 2.0)
+		lockDevice();
+}
+
+
 static void ToggleFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
 
@@ -174,8 +216,10 @@ static void ToggleFlashlight(NSString *source) {
 			[flashlightController turnFlashlightOnForReason:@"Flashlight Shortcut"];
 		}
 
-		if (source)
+		if (source) {
 			PlayHapticFeedback();
+			KeepScreenOffIfNeeded(source);
+		}
 	}
 	else
 		[Debug Log:@"SBUIFlashlightController not available"];
@@ -422,6 +466,15 @@ static void DetectBothVolumeButtonsPressed() {
 	-(BOOL)shouldTurnOnScreenForBacklightSource:(long long)arg1 {
 		if (!enabled)
 			return %orig;
+
+		if (keepScreenOff) {
+			lastWakeRequestTime = [NSDate timeIntervalSinceReferenceDate];
+			screenWasOffAtWake = !ScreenIsOn();
+			RecordBacklightSource(arg1);
+
+			if (lastWakeRequestTime < screenOffGuardUntil)
+				return NO;
+		}
 
 		if (!FlashlightOn())
 			return %orig;

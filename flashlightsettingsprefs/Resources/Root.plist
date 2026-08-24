@@ -146,6 +146,28 @@ For triple click to work, you have to have an accessibility shortcut set, which 
 
       <dict>
         <key>cell</key>
+        <string>PSSwitchCell</string>
+        <key>key</key>
+        <string>kKeepScreenOff</string>
+        <key>label</key>
+        <string>Keep Screen Off</string>
+        <key>default</key>
+        <false/>
+        <key>defaults</key>
+        <string>com.wrp1002.flashlightsettings</string>
+        <key>PostNotification</key>
+        <string>com.wrp1002.flashlightsettings/ReloadPrefs</string>
+      </dict>
+
+      <dict>
+        <key>cell</key>
+        <string>PSGroupCell</string>
+        <key>footerText</key>
+        <string>"Keep Screen Off" puts the screen back off when a button shortcut fires while the phone is asleep, so the flashlight toggles without waking the phone. The screen may still flash for a moment.</string>
+      </dict>
+
+      <dict>
+        <key>cell</key>
         <string>PSGroupCell</string>
         <key>label</key>
         <string>Haptic Feedback</string>
@@ -226,6 +248,14 @@ For triple click to work, you have to have an accessibility shortcut set, which 
         <string>lastTriggerScreenOn:</string>
         <key>label</key>
         <string>Screen Was On</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSTitleValueCell</string>
+        <key>get</key>
+        <string>recentWakeSources:</string>
+        <key>label</key>
+        <string>Wake Sources</string>
       </dict>
 
       <dict>

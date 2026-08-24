@@ -13,7 +13,7 @@ endif
 BUNDLE_NAME = FlashlightSettingsPrefs
 
 FlashlightSettingsPrefs_FILES = FSPRootListController.m
-FlashlightSettingsPrefs_FRAMEWORKS = UIKit
+FlashlightSettingsPrefs_FRAMEWORKS = UIKit AudioToolbox
 FlashlightSettingsPrefs_PRIVATE_FRAMEWORKS = Preferences
 FlashlightSettingsPrefs_INSTALL_PATH = /Library/PreferenceBundles
 FlashlightSettingsPrefs_CFLAGS = -fobjc-arc

@@ -1,7 +1,19 @@
+#import <AudioToolbox/AudioToolbox.h>
 #import <Foundation/Foundation.h>
 #import "FSPRootListController.h"
 
-@implementation FSPRootListController
+static void PreviewHapticCallback(CFNotificationCenterRef center, void *observer, CFNotificationName name, const void *object, CFDictionaryRef userInfo);
+
+//	Declared so the C notification callback below can call back into the class.
+@interface FSPRootListController ()
+-(void)rememberHapticSettings;
+-(void)previewHapticIfChanged;
+@end
+
+@implementation FSPRootListController {
+	BOOL _lastHapticEnabled;
+	NSString *_lastHapticStyle;
+}
 
 - (NSArray *)specifiers {
 	if (!_specifiers) {
@@ -22,6 +34,62 @@
 	//	The last shortcut rows are written by SpringBoard, so re-read them every
 	//	time this page comes back into view.
 	[self reloadSpecifiers];
+	[self rememberHapticSettings];
+}
+
+- (void)viewDidLoad {
+	[super viewDidLoad];
+	[self rememberHapticSettings];
+
+	//	Every switch in this page posts the reload notification, and this
+	//	process receives its own posts, so it doubles as a "settings changed"
+	//	signal for the haptic preview.
+	CFNotificationCenterAddObserver(
+		CFNotificationCenterGetDarwinNotifyCenter(),
+		(__bridge const void *)self,
+		&PreviewHapticCallback,
+		BUNDLE_NOTIFY,
+		NULL,
+		CFNotificationSuspensionBehaviorCoalesce
+	);
+}
+
+- (void)dealloc {
+	CFNotificationCenterRemoveEveryObserver(
+		CFNotificationCenterGetDarwinNotifyCenter(),
+		(__bridge const void *)self
+	);
+}
+
+-(void)rememberHapticSettings {
+	NSUserDefaults *tweakPrefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
+	_lastHapticEnabled = [tweakPrefs boolForKey:@"kHapticFeedback"];
+	_lastHapticStyle = [tweakPrefs stringForKey:@"kHapticStyle"] ?: @"medium";
+}
+
+//	Plays the feedback the user just picked, so the strength can be compared
+//	without leaving Settings and pressing a hardware button.
+-(void)previewHapticIfChanged {
+	NSUserDefaults *tweakPrefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
+	BOOL nowEnabled = [tweakPrefs boolForKey:@"kHapticFeedback"];
+	NSString *nowStyle = [tweakPrefs stringForKey:@"kHapticStyle"] ?: @"medium";
+
+	BOOL turnedOn = nowEnabled && !_lastHapticEnabled;
+	BOOL styleChanged = nowEnabled && ![nowStyle isEqualToString:_lastHapticStyle];
+
+	_lastHapticEnabled = nowEnabled;
+	_lastHapticStyle = nowStyle;
+
+	if (!turnedOn && !styleChanged)
+		return;
+
+	SystemSoundID soundID = 1520;
+	if ([nowStyle isEqualToString:@"light"])
+		soundID = 1519;
+	else if ([nowStyle isEqualToString:@"heavy"])
+		soundID = 1521;
+
+	AudioServicesPlaySystemSound(soundID);
 }
 
 
@@ -57,6 +125,14 @@
 	return [NSDateFormatter localizedStringFromDate:value
 										  dateStyle:NSDateFormatterShortStyle
 										  timeStyle:NSDateFormatterMediumStyle];
+}
+
+-(id)recentWakeSources:(PSSpecifier *)specifier {
+	id value = [self tweakPreferenceForKey:@"kRecentBacklightSources"];
+	if (![value isKindOfClass:[NSArray class]] || [value count] == 0)
+		return @"—";
+
+	return [value componentsJoinedByString:@", "];
 }
 
 -(id)lastTriggerScreenOn:(PSSpecifier *)specifier {
@@ -136,3 +212,9 @@
 
 
 @end
+
+
+static void PreviewHapticCallback(CFNotificationCenterRef center, void *observer, CFNotificationName name, const void *object, CFDictionaryRef userInfo) {
+	FSPRootListController *controller = (__bridge FSPRootListController *)observer;
+	[controller previewHapticIfChanged];
+}
