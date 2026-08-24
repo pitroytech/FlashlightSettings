@@ -1,82 +1,82 @@
-name: Build
+name: Build rootless deb
 
 on:
   push:
-    branches: ["*"]
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
-    branches: ["*"]
+  workflow_dispatch:
 
 jobs:
-  build-rootless:
-    runs-on: macos-13
+  build:
+    name: Build (Theos, rootless)
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: maxim-lobanov/setup-xcode@v1
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl fakeroot git perl unzip zip xz-utils
+
+      - name: Set up Theos
+        uses: Randomblock1/theos-action@v1
+
+      - name: Ensure the iPhoneOS 15.5 SDK is present
+        run: |
+          set -eu
+          if [ -d "$THEOS/sdks/iPhoneOS15.5.sdk" ]; then
+            echo "SDK already present"
+            exit 0
+          fi
+          echo "Fetching iPhoneOS15.5.sdk from theos/sdks"
+          mkdir -p "$THEOS/sdks"
+          curl -fsSL https://github.com/theos/sdks/archive/refs/heads/master.zip -o /tmp/sdks.zip
+          unzip -q /tmp/sdks.zip -d /tmp/sdks
+          cp -r /tmp/sdks/sdks-master/iPhoneOS15.5.sdk "$THEOS/sdks/"
+          ls -d "$THEOS"/sdks/iPhoneOS*.sdk
+
+      - name: Ensure ldid is on PATH
+        run: |
+          set -eu
+          if command -v ldid >/dev/null 2>&1; then
+            echo "ldid already on PATH: $(command -v ldid)"
+            exit 0
+          fi
+          found="$(find "$THEOS" -type f -name 'ldid*' -perm -u+x 2>/dev/null | head -n 1 || true)"
+          if [ -n "$found" ]; then
+            sudo ln -sf "$found" /usr/local/bin/ldid
+          else
+            sudo curl -fsSL -o /usr/local/bin/ldid \
+              https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64
+            sudo chmod +x /usr/local/bin/ldid
+          fi
+          command -v ldid
+
+      - name: Build package
+        run: make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Inspect produced package
+        run: |
+          set -eu
+          deb="$(ls packages/*.deb | head -n 1)"
+          echo "Package: $deb"
+          dpkg-deb -I "$deb"
+          echo "--- contents ---"
+          dpkg-deb -c "$deb"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
         with:
-          xcode-version: latest-stable
+          name: flashlightsettings-rootless-deb
+          path: packages/*.deb
+          if-no-files-found: error
 
-      - uses: actions/checkout@main
-
-      - name: Checkout theos/theos
-        uses: actions/checkout@main
+      - name: Attach package to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
         with:
-          repository: theos/theos
-          ref: master
-          submodules: recursive
-          path: theos
-
-      - name: Checkout SDKs
-        uses: actions/checkout@main
-        with:
-          repository: xybp888/iOS-SDKs
-          ref: master
-          sparse-checkout: iPhoneOS15.5.sdk
-          path: theos/sdks
-
-      - name: Install dependencies
-        run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 HOMEBREW_NO_AUTO_UPDATE=1 brew install make xz ldid
-
-      - name: Build package (rootless)
-        run: THEOS=theos gmake clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-
-      - name: Upload a Build Artifact (rootless)
-        uses: actions/upload-artifact@v3
-        with:
-          name: packages iphoneos-arm64 (rootless)
-          path: packages/*_iphoneos-arm64.deb
-
-  build-rootful:
-    runs-on: macos-13
-    steps:
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - uses: actions/checkout@main
-
-      - name: Checkout theos/theos
-        uses: actions/checkout@main
-        with:
-          repository: theos/theos
-          ref: master
-          submodules: recursive
-          path: theos
-
-      - name: Checkout SDKs
-        uses: actions/checkout@main
-        with:
-          repository: xybp888/iOS-SDKs
-          ref: master
-          sparse-checkout: iPhoneOS14.2.sdk
-          path: theos/sdks
-
-      - name: Install dependencies
-        run: brew install make xz ldid
-
-      - name: Build package (rootful)
-        run: THEOS=theos gmake clean package FINALPACKAGE=1
-
-      - name: Upload a Build Artifact (rootful)
-        uses: actions/upload-artifact@v3
-        with:
-          name: packages iphoneos-arm (rootful)
-          path: packages/*_iphoneos-arm.deb
+          files: packages/*.deb

@@ -1,4 +1,6 @@
+#import <AudioToolbox/AudioToolbox.h>
 #import <UIKit/UIKit.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 #import "Tweak.h"
 
@@ -38,6 +40,9 @@ bool shortcutHoldHome;
 bool shortcutRinger;
 bool shortcutRingerInverted;
 
+bool hapticEnabled;
+NSString *hapticStyle;
+
 NSTimeInterval lastVolumeUpPressTime = 0;
 NSTimeInterval lastVolumeDownPressTime = 0;
 NSTimer *flashlightTimer;
@@ -58,6 +63,8 @@ static void InitPrefs(void) {
 			@"kFlashlightShortcut": @"disabled",
 			@"kFlashlightTimeoutEnabled": @NO,
 			@"kFlashlightTimeoutVal": @15,
+			@"kHapticFeedback": @NO,
+			@"kHapticStyle": @"medium",
 		};
 		prefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
 		[prefs registerDefaults:defaultPrefs];
@@ -74,6 +81,8 @@ static void UpdatePrefs() {
 	flashlightShortcut = [prefs stringForKey: @"kFlashlightShortcut"];
 	flashlightTimeoutEnabled = [prefs boolForKey:@"kFlashlightTimeoutEnabled"];
 	flashlightTimeoutVal = [prefs integerForKey:@"kFlashlightTimeoutVal"];
+	hapticEnabled = [prefs boolForKey:@"kHapticFeedback"];
+	hapticStyle = [prefs stringForKey:@"kHapticStyle"];
 
 	shortcutVolume = [flashlightShortcut isEqualToString:@"volume"];
 	shortcutDoubleLock = [flashlightShortcut isEqualToString:@"doubleLock"];
@@ -94,8 +103,63 @@ static void PrefsChangeCallback(CFNotificationCenterRef center, void *observer, 
 
 // Other util functions
 
-static void ToggleFlashlight() {
+//	AudioServices is used rather than UIFeedbackGenerator because it keeps
+//	working with the screen off, which is exactly when a hardware shortcut is
+//	most useful.
+static void PlayHapticFeedback() {
+	if (!hapticEnabled)
+		return;
+
+	SystemSoundID soundID = 1520;					//	Actuate "Pop"
+	if ([hapticStyle isEqualToString:@"light"])
+		soundID = 1519;								//	Actuate "Peek"
+	else if ([hapticStyle isEqualToString:@"heavy"])
+		soundID = 1521;								//	Actuate "Nope"
+
+	AudioServicesPlaySystemSound(soundID);
+}
+
+
+static bool ScreenIsOn() {
+	id backlightController = [NSClassFromString(@"SBBacklightController") sharedInstance];
+	if (!backlightController)
+		return NO;
+
+	//	The selector differs between iOS versions, so try each one.
+	for (NSString *name in @[@"screenIsOn", @"isBacklightOn", @"screenIsDim"]) {
+		SEL selector = NSSelectorFromString(name);
+		if (![backlightController respondsToSelector:selector])
+			continue;
+
+		@try {
+			bool value = ((bool (*)(id, SEL))objc_msgSend)(backlightController, selector);
+			return [name isEqualToString:@"screenIsDim"] ? !value : value;
+		} @catch (NSException *exception) {
+			continue;
+		}
+	}
+	return NO;
+}
+
+
+//	Recorded so the settings page can show whether a shortcut fired at all, and
+//	whether the screen was on when it did. Reading a device log is not something
+//	most users can do.
+static void RecordTrigger(NSString *source) {
+	if (!source)
+		return;
+
+	[prefs setObject:source forKey:@"kLastTriggerSource"];
+	[prefs setObject:[NSDate date] forKey:@"kLastTriggerDate"];
+	[prefs setBool:ScreenIsOn() forKey:@"kLastTriggerScreenOn"];
+	[prefs synchronize];
+}
+
+
+static void ToggleFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
+
+	RecordTrigger(source);
 
 	if ([flashlightController isAvailable]) {
 		if ([flashlightController level]) {
@@ -109,13 +173,18 @@ static void ToggleFlashlight() {
 
 			[flashlightController turnFlashlightOnForReason:@"Flashlight Shortcut"];
 		}
+
+		if (source)
+			PlayHapticFeedback();
 	}
 	else
 		[Debug Log:@"SBUIFlashlightController not available"];
 }
 
-static void TurnOnFlashlight() {
+static void TurnOnFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
+
+	RecordTrigger(source);
 
 	if ([flashlightController isAvailable]) {
 		if (setMaxBrightness)
@@ -124,16 +193,24 @@ static void TurnOnFlashlight() {
 				[flashlightController setLevel:[flashlightController _loadFlashlightLevel]];
 
 			[flashlightController turnFlashlightOnForReason:@"Flashlight Shortcut"];
+
+		if (source)
+			PlayHapticFeedback();
 	}
 	else
 		[Debug Log:@"SBUIFlashlightController not available"];
 }
 
-static void TurnOffFlashlight() {
+static void TurnOffFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
+
+	RecordTrigger(source);
 
 	if ([flashlightController isAvailable]) {
 		[flashlightController turnFlashlightOffForReason:@"Flashlight Shortcut"];
+
+		if (source)
+			PlayHapticFeedback();
 	}
 	else
 		[Debug Log:@"SBUIFlashlightController not available"];
@@ -149,7 +226,7 @@ static void StartFlashlightTimer() {
 	flashlightTimer = [NSTimer scheduledTimerWithTimeInterval:(flashlightTimeoutVal * 60)
 								repeats:NO
 								block:^(NSTimer * _Nonnull timer) {
-									TurnOffFlashlight();
+									TurnOffFlashlight(nil);
 						}];
 
 }
@@ -186,7 +263,7 @@ static void lockDevice() {
 
 static void DetectBothVolumeButtonsPressed() {
 	if (fabs(lastVolumeUpPressTime - lastVolumeDownPressTime) < 0.1) {
-		ToggleFlashlight();
+		ToggleFlashlight(@"volume");
 	}
 }
 
@@ -265,7 +342,7 @@ static void DetectBothVolumeButtonsPressed() {
 
 	-(void)performDoublePressActions {
 		if (enabled && shortcutDoubleLock) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"doubleLock");
 			return;
 		}
 
@@ -274,7 +351,7 @@ static void DetectBothVolumeButtonsPressed() {
 
 	-(void)performTriplePressActions {
 		if (enabled && shortcutTripleLock) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"tripleLock");
 			return;
 		}
 
@@ -283,7 +360,7 @@ static void DetectBothVolumeButtonsPressed() {
 
 	-(void)performLongPressActions {
 		if (enabled && shortcutHoldLock) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"holdLock");
 			return;
 		}
 
@@ -295,7 +372,7 @@ static void DetectBothVolumeButtonsPressed() {
 %hook SBHomeHardwareButtonActions
 	-(void)performLongPressActions {
 		if (enabled && shortcutHoldHome) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"holdHome");
 			return;
 		}
 		%orig;
@@ -303,7 +380,7 @@ static void DetectBothVolumeButtonsPressed() {
 
 	-(void)performDoublePressDownActions {
 		if (enabled && shortcutDoubleHome) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"doubleHome");
 			return;
 		}
 
@@ -312,7 +389,7 @@ static void DetectBothVolumeButtonsPressed() {
 
 	-(void)performTriplePressUpActions {
 		if (enabled && shortcutTripleHome) {
-			ToggleFlashlight();
+			ToggleFlashlight(@"tripleHome");
 			return;
 		}
 
@@ -330,9 +407,9 @@ static void DetectBothVolumeButtonsPressed() {
 				shouldTurnOn = !shouldTurnOn;
 
 			if (shouldTurnOn)
-				TurnOnFlashlight();
+				TurnOnFlashlight(@"ringer");
 			else
-				TurnOffFlashlight();
+				TurnOffFlashlight(@"ringer");
 		}
 		else {
 			%orig;

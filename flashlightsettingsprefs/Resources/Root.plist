@@ -96,8 +96,6 @@ For triple click to work, you have to have an accessibility shortcut set, which 
         <string>kFlashlightShortcut</string>
         <key>label</key>
         <string>Flashlight Shortcut</string>
-        <key>showAlphaSlider</key>
-        <true/>
         <key>validTitles</key>
         <array>
           <string>Disabled</string>
@@ -109,7 +107,7 @@ For triple click to work, you have to have an accessibility shortcut set, which 
           <string>Home Button Triple Click</string>
           <string>Home Button Hold</string>
           <string>Ringer</string>
-          <string>Ringer Invered</string>
+          <string>Ringer Inverted</string>
         </array>
         <key>validValues</key>
         <array>
@@ -150,6 +148,90 @@ For triple click to work, you have to have an accessibility shortcut set, which 
         <key>cell</key>
         <string>PSGroupCell</string>
         <key>label</key>
+        <string>Haptic Feedback</string>
+        <key>footerText</key>
+        <string>Vibrate when a shortcut toggles the flashlight, so you can tell it worked without looking at the screen</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSSwitchCell</string>
+        <key>key</key>
+        <string>kHapticFeedback</string>
+        <key>label</key>
+        <string>Enabled</string>
+        <key>default</key>
+        <false/>
+        <key>defaults</key>
+        <string>com.wrp1002.flashlightsettings</string>
+        <key>PostNotification</key>
+        <string>com.wrp1002.flashlightsettings/ReloadPrefs</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSLinkListCell</string>
+        <key>detail</key>
+        <string>PSListItemsController</string>
+        <key>key</key>
+        <string>kHapticStyle</string>
+        <key>label</key>
+        <string>Strength</string>
+        <key>validTitles</key>
+        <array>
+          <string>Light</string>
+          <string>Medium</string>
+          <string>Heavy</string>
+        </array>
+        <key>validValues</key>
+        <array>
+          <string>light</string>
+          <string>medium</string>
+          <string>heavy</string>
+        </array>
+        <key>default</key>
+        <string>medium</string>
+        <key>defaults</key>
+        <string>com.wrp1002.flashlightsettings</string>
+        <key>PostNotification</key>
+        <string>com.wrp1002.flashlightsettings/ReloadPrefs</string>
+      </dict>
+
+      <dict>
+        <key>cell</key>
+        <string>PSGroupCell</string>
+        <key>label</key>
+        <string>Last Shortcut</string>
+        <key>footerText</key>
+        <string>Shows the last time a shortcut fired and whether the screen was on. Use it to check whether a shortcut reaches the tweak with the screen off.</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSTitleValueCell</string>
+        <key>get</key>
+        <string>lastTriggerSource:</string>
+        <key>label</key>
+        <string>Shortcut</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSTitleValueCell</string>
+        <key>get</key>
+        <string>lastTriggerDate:</string>
+        <key>label</key>
+        <string>When</string>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSTitleValueCell</string>
+        <key>get</key>
+        <string>lastTriggerScreenOn:</string>
+        <key>label</key>
+        <string>Screen Was On</string>
+      </dict>
+
+      <dict>
+        <key>cell</key>
+        <string>PSGroupCell</string>
+        <key>label</key>
         <string>Flashlight Timeout</string>
         <key>footerText</key>
         <string>Automatically turn off the flashlight after X minutes</string>
@@ -173,6 +255,8 @@ For triple click to work, you have to have an accessibility shortcut set, which 
         <string>PSEditTextCell</string>
         <key>key</key>
         <string>kFlashlightTimeoutVal</string>
+        <key>label</key>
+        <string>Minutes</string>
         <key>default</key>
         <string>15</string>
         <key>keyboard</key>

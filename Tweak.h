@@ -34,3 +34,11 @@
 -(void)lockAndDimDevice;
 @end
 
+
+
+@interface SBBacklightController : NSObject
++(id)sharedInstance;
+-(BOOL)screenIsOn;
+-(BOOL)isBacklightOn;
+-(BOOL)screenIsDim;
+@end

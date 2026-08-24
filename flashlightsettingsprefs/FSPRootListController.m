@@ -17,6 +17,56 @@
 	[self reloadSpecifiers];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+	[super viewWillAppear:animated];
+	//	The last shortcut rows are written by SpringBoard, so re-read them every
+	//	time this page comes back into view.
+	[self reloadSpecifiers];
+}
+
+
+-(id)tweakPreferenceForKey:(NSString *)key {
+	NSUserDefaults *tweakPrefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
+	return [tweakPrefs objectForKey:key];
+}
+
+-(id)lastTriggerSource:(PSSpecifier *)specifier {
+	id value = [self tweakPreferenceForKey:@"kLastTriggerSource"];
+	if (![value isKindOfClass:[NSString class]])
+		return @"Never fired";
+
+	//	Show the same wording the shortcut list uses.
+	NSDictionary *names = @{
+		@"volume": @"Volume Up + Down",
+		@"doubleLock": @"Lock Double Click",
+		@"tripleLock": @"Lock Triple Click",
+		@"holdLock": @"Lock Hold",
+		@"doubleHome": @"Home Double Click",
+		@"tripleHome": @"Home Triple Click",
+		@"holdHome": @"Home Hold",
+		@"ringer": @"Ringer",
+	};
+	return names[value] ?: value;
+}
+
+-(id)lastTriggerDate:(PSSpecifier *)specifier {
+	id value = [self tweakPreferenceForKey:@"kLastTriggerDate"];
+	if (![value isKindOfClass:[NSDate class]])
+		return @"—";
+
+	return [NSDateFormatter localizedStringFromDate:value
+										  dateStyle:NSDateFormatterShortStyle
+										  timeStyle:NSDateFormatterMediumStyle];
+}
+
+-(id)lastTriggerScreenOn:(PSSpecifier *)specifier {
+	id value = [self tweakPreferenceForKey:@"kLastTriggerScreenOn"];
+	if (![value isKindOfClass:[NSNumber class]])
+		return @"—";
+
+	return [value boolValue] ? @"Yes" : @"No";
+}
+
 -(void)OpenGithub {
 	UIApplication *application = [UIApplication sharedApplication];
 	NSURL *URL = [NSURL URLWithString:@"https://github.com/wrp1002/FlashlightSettings"];
