@@ -25,19 +25,25 @@ jobs:
       - name: Set up Theos
         uses: Randomblock1/theos-action@v1
 
-      - name: Ensure the iPhoneOS 15.5 SDK is present
+      # The Makefile asks for the 15.5 SDK, which theos/sdks does not carry.
+      # Any SDK from 15 up builds this fine, so pick the newest one available
+      # and keep the 15.0 deployment target.
+      - name: Pick an iPhoneOS SDK
         run: |
           set -eu
-          if [ -d "$THEOS/sdks/iPhoneOS15.5.sdk" ]; then
-            echo "SDK already present"
-            exit 0
+          sdk="$(ls -d "$THEOS"/sdks/iPhoneOS1[5-9]*.sdk 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -z "$sdk" ]; then
+            echo "No suitable SDK installed, fetching iPhoneOS16.5.sdk from theos/sdks"
+            mkdir -p "$THEOS/sdks"
+            curl -fsSL https://github.com/theos/sdks/archive/refs/heads/master.zip -o /tmp/sdks.zip
+            unzip -q /tmp/sdks.zip -d /tmp/sdks
+            cp -r /tmp/sdks/sdks-master/iPhoneOS16.5.sdk "$THEOS/sdks/"
+            sdk="$THEOS/sdks/iPhoneOS16.5.sdk"
           fi
-          echo "Fetching iPhoneOS15.5.sdk from theos/sdks"
-          mkdir -p "$THEOS/sdks"
-          curl -fsSL https://github.com/theos/sdks/archive/refs/heads/master.zip -o /tmp/sdks.zip
-          unzip -q /tmp/sdks.zip -d /tmp/sdks
-          cp -r /tmp/sdks/sdks-master/iPhoneOS15.5.sdk "$THEOS/sdks/"
-          ls -d "$THEOS"/sdks/iPhoneOS*.sdk
+          version="$(basename "$sdk" .sdk)"
+          version="${version#iPhoneOS}"
+          echo "Using $sdk"
+          echo "SDK_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Ensure ldid is on PATH
         run: |
@@ -57,7 +63,7 @@ jobs:
           command -v ldid
 
       - name: Build package
-        run: make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+        run: make clean package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless TARGET=iphone:clang:$SDK_VERSION:15.0
 
       - name: Inspect produced package
         run: |
