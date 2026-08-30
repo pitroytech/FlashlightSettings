@@ -129,10 +129,17 @@ static void PlayHapticFeedback() {
 }
 
 
+//	Returns YES when it cannot tell.
+//
+//	The answer feeds screenWasOffAtWake, and "off" is what gives
+//	KeepScreenOffIfNeeded permission to lock the device. Guessing "off" on a
+//	firmware whose selector this does not know would blank the screen while the
+//	owner was using it; guessing "on" only means the shortcut fails to keep the
+//	screen off, which is the harmless direction to be wrong in.
 static bool ScreenIsOn() {
 	id backlightController = [NSClassFromString(@"SBBacklightController") sharedInstance];
 	if (!backlightController)
-		return NO;
+		return YES;
 
 	//	The selector differs between iOS versions, so try each one.
 	for (NSString *name in @[@"screenIsOn", @"isBacklightOn", @"screenIsDim"]) {
@@ -147,37 +154,7 @@ static bool ScreenIsOn() {
 			continue;
 		}
 	}
-	return NO;
-}
-
-
-//	Recorded so the settings page can show whether a shortcut fired at all, and
-//	whether the screen was on when it did. Reading a device log is not something
-//	most users can do.
-static void RecordTrigger(NSString *source) {
-	if (!source)
-		return;
-
-	[prefs setObject:source forKey:@"kLastTriggerSource"];
-	[prefs setObject:[NSDate date] forKey:@"kLastTriggerDate"];
-	[prefs setBool:ScreenIsOn() forKey:@"kLastTriggerScreenOn"];
-	[prefs synchronize];
-}
-
-
-//	The backlight source numbers differ between iOS versions. Recording the
-//	recent ones shows which number the lock button uses on this device instead
-//	of guessing at it.
-static void RecordBacklightSource(long long source) {
-	NSMutableArray *sources = [[prefs arrayForKey:@"kRecentBacklightSources"] mutableCopy];
-	if (!sources)
-		sources = [NSMutableArray array];
-
-	[sources insertObject:@(source) atIndex:0];
-	while (sources.count > 8)
-		[sources removeLastObject];
-
-	[prefs setObject:sources forKey:@"kRecentBacklightSources"];
+	return YES;
 }
 
 
@@ -200,8 +177,6 @@ static void KeepScreenOffIfNeeded(NSString *source) {
 
 static void ToggleFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
-
-	RecordTrigger(source);
 
 	if ([flashlightController isAvailable]) {
 		if ([flashlightController level]) {
@@ -228,8 +203,6 @@ static void ToggleFlashlight(NSString *source) {
 static void TurnOnFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
 
-	RecordTrigger(source);
-
 	if ([flashlightController isAvailable]) {
 		if (setMaxBrightness)
 				[flashlightController setLevel:4];
@@ -247,8 +220,6 @@ static void TurnOnFlashlight(NSString *source) {
 
 static void TurnOffFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
-
-	RecordTrigger(source);
 
 	if ([flashlightController isAvailable]) {
 		[flashlightController turnFlashlightOffForReason:@"Flashlight Shortcut"];
@@ -444,6 +415,11 @@ static void DetectBothVolumeButtonsPressed() {
 %hook SpringBoard
 	- (void)_updateRingerState:(int)arg1 withVisuals:(BOOL)arg2 updatePreferenceRegister:(BOOL)arg3 {
 
+		//	%orig runs either way. Skipping it stopped the switch from
+		//	actually muting the phone: the shortcut is meant to ride along with
+		//	the ringer, not to replace it.
+		%orig;
+
 		if (enabled && (shortcutRinger || shortcutRingerInverted)) {
 			bool shouldTurnOn = arg1;
 
@@ -454,9 +430,6 @@ static void DetectBothVolumeButtonsPressed() {
 				TurnOnFlashlight(@"ringer");
 			else
 				TurnOffFlashlight(@"ringer");
-		}
-		else {
-			%orig;
 		}
 	}
 %end
@@ -470,7 +443,6 @@ static void DetectBothVolumeButtonsPressed() {
 		if (keepScreenOff) {
 			lastWakeRequestTime = [NSDate timeIntervalSinceReferenceDate];
 			screenWasOffAtWake = !ScreenIsOn();
-			RecordBacklightSource(arg1);
 
 			if (lastWakeRequestTime < screenOffGuardUntil)
 				return NO;

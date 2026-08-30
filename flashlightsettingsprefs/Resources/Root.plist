@@ -221,47 +221,6 @@ For triple click to work, you have to have an accessibility shortcut set, which 
         <key>cell</key>
         <string>PSGroupCell</string>
         <key>label</key>
-        <string>Last Shortcut</string>
-        <key>footerText</key>
-        <string>Shows the last time a shortcut fired and whether the screen was on. Use it to check whether a shortcut reaches the tweak with the screen off.</string>
-      </dict>
-      <dict>
-        <key>cell</key>
-        <string>PSTitleValueCell</string>
-        <key>get</key>
-        <string>lastTriggerSource:</string>
-        <key>label</key>
-        <string>Shortcut</string>
-      </dict>
-      <dict>
-        <key>cell</key>
-        <string>PSTitleValueCell</string>
-        <key>get</key>
-        <string>lastTriggerDate:</string>
-        <key>label</key>
-        <string>When</string>
-      </dict>
-      <dict>
-        <key>cell</key>
-        <string>PSTitleValueCell</string>
-        <key>get</key>
-        <string>lastTriggerScreenOn:</string>
-        <key>label</key>
-        <string>Screen Was On</string>
-      </dict>
-      <dict>
-        <key>cell</key>
-        <string>PSTitleValueCell</string>
-        <key>get</key>
-        <string>recentWakeSources:</string>
-        <key>label</key>
-        <string>Wake Sources</string>
-      </dict>
-
-      <dict>
-        <key>cell</key>
-        <string>PSGroupCell</string>
-        <key>label</key>
         <string>Flashlight Timeout</string>
         <key>footerText</key>
         <string>Automatically turn off the flashlight after X minutes</string>

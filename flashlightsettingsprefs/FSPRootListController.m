@@ -93,56 +93,6 @@ static void PreviewHapticCallback(CFNotificationCenterRef center, void *observer
 }
 
 
--(id)tweakPreferenceForKey:(NSString *)key {
-	NSUserDefaults *tweakPrefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
-	return [tweakPrefs objectForKey:key];
-}
-
--(id)lastTriggerSource:(PSSpecifier *)specifier {
-	id value = [self tweakPreferenceForKey:@"kLastTriggerSource"];
-	if (![value isKindOfClass:[NSString class]])
-		return @"Never fired";
-
-	//	Show the same wording the shortcut list uses.
-	NSDictionary *names = @{
-		@"volume": @"Volume Up + Down",
-		@"doubleLock": @"Lock Double Click",
-		@"tripleLock": @"Lock Triple Click",
-		@"holdLock": @"Lock Hold",
-		@"doubleHome": @"Home Double Click",
-		@"tripleHome": @"Home Triple Click",
-		@"holdHome": @"Home Hold",
-		@"ringer": @"Ringer",
-	};
-	return names[value] ?: value;
-}
-
--(id)lastTriggerDate:(PSSpecifier *)specifier {
-	id value = [self tweakPreferenceForKey:@"kLastTriggerDate"];
-	if (![value isKindOfClass:[NSDate class]])
-		return @"—";
-
-	return [NSDateFormatter localizedStringFromDate:value
-										  dateStyle:NSDateFormatterShortStyle
-										  timeStyle:NSDateFormatterMediumStyle];
-}
-
--(id)recentWakeSources:(PSSpecifier *)specifier {
-	id value = [self tweakPreferenceForKey:@"kRecentBacklightSources"];
-	if (![value isKindOfClass:[NSArray class]] || [value count] == 0)
-		return @"—";
-
-	return [value componentsJoinedByString:@", "];
-}
-
--(id)lastTriggerScreenOn:(PSSpecifier *)specifier {
-	id value = [self tweakPreferenceForKey:@"kLastTriggerScreenOn"];
-	if (![value isKindOfClass:[NSNumber class]])
-		return @"—";
-
-	return [value boolValue] ? @"Yes" : @"No";
-}
-
 -(void)OpenGithub {
 	UIApplication *application = [UIApplication sharedApplication];
 	NSURL *URL = [NSURL URLWithString:@"https://github.com/wrp1002/FlashlightSettings"];
@@ -184,13 +134,14 @@ static void PreviewHapticCallback(CFNotificationCenterRef center, void *observer
 }
 
 -(void)Reset {
+	//	-dictionaryRepresentation returns the merged view of every domain the
+	//	process can see — the global domain included — so the previous version
+	//	walked hundreds of keys belonging to the rest of the system and asked
+	//	for each to be removed. Removing the tweak's own domain says the same
+	//	thing about the keys that are actually ours and nothing at all about
+	//	anyone else's.
 	NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
-
-	NSArray *allKeys = [prefs dictionaryRepresentation].allKeys;
-
-	for (NSString *key in allKeys) {
-		[prefs removeObjectForKey:key];
-	}
+	[prefs removePersistentDomainForName:BUNDLE];
 	[prefs synchronize];
 
 	[self reloadSpecifiers];
