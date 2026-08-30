@@ -42,11 +42,6 @@ bool shortcutRingerInverted;
 
 bool hapticEnabled;
 NSString *hapticStyle;
-bool keepScreenOff;
-
-NSTimeInterval lastWakeRequestTime = 0;
-NSTimeInterval screenOffGuardUntil = 0;
-bool screenWasOffAtWake = false;
 
 static void lockDevice();
 
@@ -72,7 +67,6 @@ static void InitPrefs(void) {
 			@"kFlashlightTimeoutVal": @15,
 			@"kHapticFeedback": @NO,
 			@"kHapticStyle": @"medium",
-			@"kKeepScreenOff": @NO,
 		};
 		prefs = [[NSUserDefaults alloc] initWithSuiteName:BUNDLE];
 		[prefs registerDefaults:defaultPrefs];
@@ -91,7 +85,6 @@ static void UpdatePrefs() {
 	flashlightTimeoutVal = [prefs integerForKey:@"kFlashlightTimeoutVal"];
 	hapticEnabled = [prefs boolForKey:@"kHapticFeedback"];
 	hapticStyle = [prefs stringForKey:@"kHapticStyle"];
-	keepScreenOff = [prefs boolForKey:@"kKeepScreenOff"];
 
 	shortcutVolume = [flashlightShortcut isEqualToString:@"volume"];
 	shortcutDoubleLock = [flashlightShortcut isEqualToString:@"doubleLock"];
@@ -129,52 +122,6 @@ static void PlayHapticFeedback() {
 }
 
 
-//	Returns YES when it cannot tell.
-//
-//	The answer feeds screenWasOffAtWake, and "off" is what gives
-//	KeepScreenOffIfNeeded permission to lock the device. Guessing "off" on a
-//	firmware whose selector this does not know would blank the screen while the
-//	owner was using it; guessing "on" only means the shortcut fails to keep the
-//	screen off, which is the harmless direction to be wrong in.
-static bool ScreenIsOn() {
-	id backlightController = [NSClassFromString(@"SBBacklightController") sharedInstance];
-	if (!backlightController)
-		return YES;
-
-	//	The selector differs between iOS versions, so try each one.
-	for (NSString *name in @[@"screenIsOn", @"isBacklightOn", @"screenIsDim"]) {
-		SEL selector = NSSelectorFromString(name);
-		if (![backlightController respondsToSelector:selector])
-			continue;
-
-		@try {
-			bool value = ((bool (*)(id, SEL))objc_msgSend)(backlightController, selector);
-			return [name isEqualToString:@"screenIsDim"] ? !value : value;
-		} @catch (NSException *exception) {
-			continue;
-		}
-	}
-	return YES;
-}
-
-
-//	A lock button press wakes the screen before the long press is recognised, so
-//	the wake cannot simply be refused. Put the screen back off instead, and
-//	refuse the wake requests that follow.
-static void KeepScreenOffIfNeeded(NSString *source) {
-	if (!keepScreenOff || !source)
-		return;
-
-	NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-	screenOffGuardUntil = now + 1.5;
-
-	//	Only undo a wake the button press itself caused. Nothing is dimmed if
-	//	the screen was already on and in use.
-	if (screenWasOffAtWake && (now - lastWakeRequestTime) < 2.0)
-		lockDevice();
-}
-
-
 static void ToggleFlashlight(NSString *source) {
 	SBUIFlashlightController *flashlightController = [NSClassFromString(@"SBUIFlashlightController") sharedInstance];
 
@@ -191,10 +138,8 @@ static void ToggleFlashlight(NSString *source) {
 			[flashlightController turnFlashlightOnForReason:@"Flashlight Shortcut"];
 		}
 
-		if (source) {
+		if (source)
 			PlayHapticFeedback();
-			KeepScreenOffIfNeeded(source);
-		}
 	}
 	else
 		[Debug Log:@"SBUIFlashlightController not available"];
@@ -439,14 +384,6 @@ static void DetectBothVolumeButtonsPressed() {
 	-(BOOL)shouldTurnOnScreenForBacklightSource:(long long)arg1 {
 		if (!enabled)
 			return %orig;
-
-		if (keepScreenOff) {
-			lastWakeRequestTime = [NSDate timeIntervalSinceReferenceDate];
-			screenWasOffAtWake = !ScreenIsOn();
-
-			if (lastWakeRequestTime < screenOffGuardUntil)
-				return NO;
-		}
 
 		if (!FlashlightOn())
 			return %orig;
